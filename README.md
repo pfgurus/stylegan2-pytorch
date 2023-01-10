@@ -44,6 +44,10 @@ $ pip install stylegan2_pytorch
 ```bash
 $ stylegan2_pytorch --data /path/to/images
 ```
+If you just cloned the repo, do this instead here and in other places:
+```bash
+$ python stylegan2_pytorch/cli.py --data /path/to/images
+```
 
 That's it. Sample images will be saved to `results/default` and models will be saved periodically to `models/default`.
 

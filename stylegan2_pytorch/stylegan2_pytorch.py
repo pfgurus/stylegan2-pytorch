@@ -28,10 +28,10 @@ from kornia.filters import filter2d
 
 import torchvision
 from torchvision import transforms
-from stylegan2_pytorch.version import __version__
-from stylegan2_pytorch.diff_augment import DiffAugment
 
-from vector_quantize_pytorch import VectorQuantize
+# Local imports
+from version import __version__
+from diff_augment import DiffAugment
 
 from PIL import Image
 from pathlib import Path
@@ -640,6 +640,9 @@ class Discriminator(nn.Module):
         blocks = []
         attn_blocks = []
         quantize_blocks = []
+
+        if fq_layers:
+            from vector_quantize_pytorch import VectorQuantize
 
         for ind, (in_chan, out_chan) in enumerate(chan_in_out):
             num_layer = ind + 1
