@@ -46,6 +46,8 @@ import aim
 
 assert torch.cuda.is_available(), 'You need to have an Nvidia GPU with CUDA installed.'
 
+D_REGRESSION_TEST = False  #  Activate test code for regression test
+
 
 # constants
 
@@ -698,7 +700,23 @@ class StyleGAN2(nn.Module):
 
         self.S = StyleVectorizer(latent_dim, style_depth, lr_mul = lr_mlp)
         self.G = Generator(image_size, latent_dim, network_capacity, transparent = transparent, attn_layers = attn_layers, no_const = no_const, fmap_max = fmap_max)
+
+        if D_REGRESSION_TEST:
+            torch.random.manual_seed(1)
         self.D = Discriminator(image_size, network_capacity, fq_layers = fq_layers, fq_dict_size = fq_dict_size, attn_layers = attn_layers, transparent = transparent, fmap_max = fmap_max)
+
+        if D_REGRESSION_TEST:
+            D_num_params = 0
+
+            for m in self.D.modules():
+                if type(m) in {nn.Conv2d, nn.Linear}:
+                    nn.init.kaiming_normal_(m.weight, a=0, mode='fan_in', nonlinearity='leaky_relu')
+
+            for p in self.D.parameters():
+               D_num_params += p.numel()
+
+            d, _ = self.D(torch.cat((torch.ones(1, 3, 256, 256), -torch.ones(1, 3, 256, 256)), 0))
+            print(D_num_params, d)
 
         self.SE = StyleVectorizer(latent_dim, style_depth, lr_mul = lr_mlp)
         self.GE = Generator(image_size, latent_dim, network_capacity, transparent = transparent, attn_layers = attn_layers, no_const = no_const)
