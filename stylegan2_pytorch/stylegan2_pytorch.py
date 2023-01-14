@@ -17,6 +17,7 @@ import numpy as np
 import torch
 from torch import nn, einsum
 from torch.utils import data
+from torch.utils import tensorboard
 from torch.optim import Adam
 import torch.nn.functional as F
 from torch.autograd import grad as torch_grad
@@ -837,6 +838,7 @@ class Trainer():
         self.models_dir = base_dir / models_dir
         self.fid_dir = base_dir / 'fid' / name
         self.config_path = self.models_dir / name / '.config.json'
+        self.log_file = self.results_dir / name / 'log.txt'
 
         assert log2(image_size).is_integer(), 'image size must be a power of 2 (64, 128, 256, 512, 1024)'
         self.image_size = image_size
@@ -909,7 +911,9 @@ class Trainer():
         self.rank = rank
         self.world_size = world_size
 
-        self.logger = aim.Session(experiment=name) if log else None
+        self.logger = None
+        if log:
+            self.logger = tensorboard.SummaryWriter(str(self.results_dir / self.name), filename_suffix=f'-{self.rank}')
 
     @property
     def image_extension(self):
@@ -933,9 +937,6 @@ class Trainer():
             self.G_ddp = DDP(self.GAN.G, **ddp_kwargs)
             self.D_ddp = DDP(self.GAN.D, **ddp_kwargs)
             self.D_aug_ddp = DDP(self.GAN.D_aug, **ddp_kwargs)
-
-        if exists(self.logger):
-            self.logger.set_params(self.hparams)
 
     def write_config(self):
         self.config_path.write_text(json.dumps(self.config()))
@@ -1076,7 +1077,7 @@ class Trainer():
             if apply_gradient_penalty:
                 gp = gradient_penalty(image_batch, real_output)
                 self.last_gp_loss = gp.clone().detach().item()
-                self.track(self.last_gp_loss, 'GP')
+                self.track(self.last_gp_loss, 'last_gp_loss')
                 disc_loss = disc_loss + gp
 
             disc_loss = disc_loss / self.gradient_accumulate_every
@@ -1086,7 +1087,7 @@ class Trainer():
             total_disc_loss += divergence.detach().item() / self.gradient_accumulate_every
 
         self.d_loss = float(total_disc_loss)
-        self.track(self.d_loss, 'D')
+        self.track(self.d_loss, 'd_loss')
 
         self.GAN.D_opt.step()
 
@@ -1138,7 +1139,7 @@ class Trainer():
             total_gen_loss += loss.detach().item() / self.gradient_accumulate_every
 
         self.g_loss = float(total_gen_loss)
-        self.track(self.g_loss, 'G')
+        self.track(self.g_loss, 'g_loss')
 
         self.GAN.G_opt.step()
 
@@ -1146,7 +1147,7 @@ class Trainer():
 
         if apply_path_penalty and not np.isnan(avg_pl_length):
             self.pl_mean = self.pl_length_ma.update_average(self.pl_mean, avg_pl_length)
-            self.track(self.pl_mean, 'PL')
+            self.track(self.pl_mean, 'pl_mean')
 
         if self.is_main and self.steps % 10 == 0 and self.steps > 20000:
             self.GAN.EMA()
@@ -1345,23 +1346,27 @@ class Trainer():
 
     def print_log(self):
         data = [
-            ('G', self.g_loss),
-            ('D', self.d_loss),
-            ('GP', self.last_gp_loss),
-            ('PL', self.pl_mean),
-            ('CR', self.last_cr_loss),
-            ('Q', self.q_loss),
-            ('FID', self.last_fid)
+            ('g_loss', self.g_loss),
+            ('d_loss', self.d_loss),
+            ('last_gp_loss', self.last_gp_loss),
+            ('pl_mean', self.pl_mean),
+            ('last_cr_loss', self.last_cr_loss),
+            ('q_loss', self.q_loss),
+            ('last_fid', self.last_fid)
         ]
 
         data = [d for d in data if exists(d[1])]
         log = ' | '.join(map(lambda n: f'{n[0]}: {n[1]:.2f}', data))
-        print(log)
+        with open(self.log_file, 'a') as f:
+            print(log, file=f)
+
+    def flush_log(self):
+        if exists(self.logger):
+            self.logger.flush()
 
     def track(self, value, name):
-        if not exists(self.logger):
-            return
-        self.logger.track(value, name = name)
+        if exists(self.logger):
+            self.logger.add_scalar(f'{self.rank}:{name}', value, self.steps)
 
     def model_name(self, num):
         return str(self.models_dir / self.name / f'model_{num}.pt')

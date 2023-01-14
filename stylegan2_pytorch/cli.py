@@ -60,8 +60,10 @@ def run_training(rank, world_size, model_args, data, load_from, new, num_train_s
         retry_call(model.train, tries=3, exceptions=NanException)
         progress_bar.n = model.steps
         progress_bar.refresh()
-        if is_main and model.steps % 50 == 0:
-            model.print_log()
+        if is_main:
+            model.flush_log()
+            if model.steps % 5 == 0:
+                model.print_log()
 
     model.save(model.checkpoint_num)
 
@@ -116,7 +118,7 @@ def train_from_folder(
     calculate_fid_num_images = 12800,
     clear_fid_cache = False,
     seed = 42,
-    log = False
+    log = True
 ):
     model_args = dict(
         name = name,
