@@ -62,7 +62,7 @@ def run_training(rank, world_size, model_args, data, load_from, new, num_train_s
         progress_bar.refresh()
         if is_main:
             model.flush_log()
-            if model.steps % 5 == 0:
+            if model.steps % 50 == 0:
                 model.print_log()
 
     model.save(model.checkpoint_num)

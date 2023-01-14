@@ -300,9 +300,16 @@ def slerp(val, low, high):
 # losses
 
 def gen_hinge_loss(fake, real):
+    """
+    :param real prediction of the discriminator on real images(negative values).
+    """
     return fake.mean()
 
 def hinge_loss(real, fake):
+    """
+    :param real prediction of the discriminator on real images (negative values).
+    :param fake prediction of the discriminator on fake images (positive values).
+    """
     return (F.relu(1 + real) + F.relu(1 - fake)).mean()
 
 def dual_contrastive_loss(real_logits, fake_logits):
@@ -1357,6 +1364,7 @@ class Trainer():
 
         data = [d for d in data if exists(d[1])]
         log = ' | '.join(map(lambda n: f'{n[0]}: {n[1]:.2f}', data))
+        log = f'{self.steps} | ' + log
         with open(self.log_file, 'a') as f:
             print(log, file=f)
 
